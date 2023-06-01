@@ -41,7 +41,11 @@ split_config.connect_loss(
     classification_loss, ["feature"], metric_name = "classification_loss"
 )
 ```
-## few shot dataset
+## Datasets :
+
+Classical dataset : 
+Torchvision provides plenty of dataset. You can use a symbolic link/ absolute link to put all the necessary dataset into a common folder.
+
 Learn2learn module include dataset for fewshot. If you are like me and incouter a warning when downloading a large file from google drive, checkout the utils/dataset_utils.py for an exemple of download with cifar-fs.
 
 
@@ -61,7 +65,7 @@ For manifold mixup, the backbone behave differently at training time than usuall
 
 
 # To come :
-## Contrastiveapproach
+## Contrastive approach
 
 In contrastive approach, sevral views of the data are generated, and the view are compared between each other using a special loss, as well as a custom loss (that use either the target information, either the information about the provenance of each view in the batch). Need to implement a multiview, a dispatcher for this view, and the constrastive loss.
 
