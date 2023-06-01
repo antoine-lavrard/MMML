@@ -1,0 +1,50 @@
+_target_: torch.utils.data.DataLoader
+dataset:
+  _target_: dataset.MultiSourceDataset
+  datasets:
+  - _target_: torchvision.datasets.MNIST
+    root: ./data
+    train: true
+    download: true
+    transform:
+      _target_: torchvision.transforms.Compose
+      transforms:
+      - _target_: torchvision.transforms.ToTensor
+      - _target_: torchvision.transforms.Normalize
+        mean:
+        - 0.1307
+        std:
+        - 0.3081
+  - _target_: torchvision.datasets.FashionMNIST
+    root: ./data
+    train: true
+    download: true
+    transform:
+      _target_: torchvision.transforms.Compose
+      transforms:
+      - _target_: torchvision.transforms.ToTensor
+      - _target_: torchvision.transforms.Normalize
+        mean:
+        - 0.2859
+        std:
+        - 0.353
+  list_name:
+  - MNIST
+  - FASHION_MNIST
+batch_sampler:
+  _target_: dataset.AlternateBatchSampler
+  samplers:
+  - _target_: torch.utils.data.BatchSampler
+    sampler:
+      _target_: torch.utils.data.RandomSampler
+      data_source: ${data.dataset.datasets[0]}
+    batch_size: 128
+    drop_last: false
+  - _target_: torch.utils.data.BatchSampler
+    sampler:
+      _target_: torch.utils.data.RandomSampler
+      data_source: ${data.dataset.datasets[1]}
+    batch_size: 128
+    drop_last: false
+num_workers : 4
+pin_memory : true

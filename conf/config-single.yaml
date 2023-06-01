@@ -1,0 +1,123 @@
+defaults: 
+    #- data@data_train : cifar_compose
+    - backbones@backbones.vgg : vgg8
+    - train_config@training_steps.train : step_lr
+    - _self_
+
+hydra:
+  run:
+    dir: outputs/${comment}/${now:%Y-%m-%d_%H-%M-%S}/
+
+heads:
+  classifier_cifar10:
+    _target_ : head.Projection
+    _args_ :
+      - 512
+      - 10
+
+losses:
+  loss_cifar10:
+    _target_ : head.WrappedLossFunction
+    _args_ :
+      - _target_ : torch.nn.CrossEntropyLoss
+  loss_cifar100:
+    _target_ : head.WrappedLossFunction
+    _args_ :
+      - _target_ : torch.nn.CrossEntropyLoss
+
+metrics:
+  accuracy_cifar10:
+    _target_ : torchmetrics.classification.MulticlassAccuracy
+    num_classes : 10
+
+training_steps:
+  train :
+    data_loader:
+      _target_: torch.utils.data.DataLoader
+      dataset:
+        _target_: torchvision.datasets.CIFAR10
+        root: ./datasets
+        train: true
+        download: true
+        transform:
+          _target_: torchvision.transforms.Compose
+          transforms:
+          - _target_: torchvision.transforms.ToTensor
+          - _target_ : torchvision.transforms.RandomHorizontalFlip
+          - _target_: torchvision.transforms.Normalize
+            mean:
+            - 0.4914
+            - 0.4822
+            - 0.4465
+            std:
+            - 0.247
+            - 0.243
+            - 0.261
+      batch_size : 128
+      num_workers : 5
+      pin_memory : true
+      persistent_workers : true
+      
+    inputs_handler :
+      _target_ : meta_prog.SingleDatasetInputManager
+      _args_:
+        - "CIFAR10"
+    graph :
+      - input : CIFAR10
+        node : vgg
+        output_name : repr_cifar10
+      - input : repr_cifar10
+        node : classifier_cifar10
+        output_name : proj_cifar10
+      - input : proj_cifar10
+        node : loss_cifar10
+        output_name : loss_cifar10
+      - input : proj_cifar10
+        node : accuracy_cifar10
+        output_name : accuracy_cifar10
+
+validation :
+  data_loader:
+    _target_: torch.utils.data.DataLoader
+    dataset:
+      _target_: torchvision.datasets.CIFAR10
+      root: ./datasets
+      train: false
+      download: true
+      transform:
+        _target_: torchvision.transforms.Compose
+        transforms:
+        - _target_: torchvision.transforms.ToTensor
+        - _target_ : torchvision.transforms.RandomHorizontalFlip
+        - _target_: torchvision.transforms.Normalize
+          mean:
+          - 0.4914
+          - 0.4822
+          - 0.4465
+          std:
+          - 0.247
+          - 0.243
+          - 0.261
+    batch_size : 128
+    num_workers : 5
+    pin_memory : true
+    persistent_workers : true
+  inputs_handler :
+    _target_ : meta_prog.SingleDatasetInputManager
+    _args_:
+      - "CIFAR10"
+  graph :
+    - input : CIFAR10
+      node : vgg
+      output_name : repr_cifar10
+    - input : repr_cifar10
+      node : classifier_cifar10
+      output_name : proj_cifar10
+    - input : proj_cifar10
+      node : loss_cifar10
+      output_name : loss_cifar10
+    - input : proj_cifar10
+      node : accuracy_cifar10
+      output_name : accuracy_cifar10
+
+comment : "vgg8 + cifar10"
