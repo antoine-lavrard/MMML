@@ -1,9 +1,10 @@
 
-# Project presentation
+# MMML : Multiple Module for Modular Learning
 
-This project aims to provide support for multi-heads/ multi-backbone network, that can be used for few-shot and self supervised learning, and decouple the training code/ definition of the methods from the configuration. It is destined to researcher that want to experiment with meta-learning using different building blocks from the literature.
+MMML is a versatile GitHub repository dedicated to the field of Deep learning. With a focus on flexibility and modularity, this project aims to demonstrate how one could separate the configuration of various experiments from the actual code definition, for complex neural architecture that feature sevral building blocks. Leveraging the power of PyTorch, MMML enables users to easily experiment with new building blocks without the need to modify the entire training procedure.
 
-At each experiment, the main file (that should contain only configuration) is saved. Configuration of the multi-heads / multi-backbone / multi-metric model is done using a config builder, and a general pytorch model that take a graph of backbone / heads / metrics at initialisation and implement the forward pass. 
+The unique aspect of FlexiLearnNet lies in its approach to decomposing the components of a neural network. By separating the backbone, head, metric, and loss functions and defining their configuration using a graph structure, users can tailor the architecture to suit their specific needs. This modular approach facilitates the creation and sharing of experiments, making it effortless to explore new techniques and incorporate different components into the learning pipeline.
+
 
 # Installation step :
 

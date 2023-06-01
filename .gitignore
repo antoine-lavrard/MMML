@@ -1,3 +1,8 @@
+.vscode/
+conf/
+datasets/
+outputs/
+# folowing auto generated
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
