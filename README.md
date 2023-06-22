@@ -3,7 +3,7 @@
 
 MMML is a versatile GitHub repository dedicated to the field of Deep learning. With a focus on flexibility and modularity, this project aims to demonstrate how one could separate the configuration of various experiments from the actual code definition, for complex neural architecture that feature sevral building blocks. Leveraging the power of PyTorch, MMML enables users to easily experiment with new building blocks without the need to modify the entire training procedure.
 
-The unique aspect of FlexiLearnNet lies in its approach to decomposing the components of a neural network. By separating the backbone, head, metric, and loss functions and defining their configuration using a graph structure, users can tailor the architecture to suit their specific needs. This modular approach facilitates the creation and sharing of experiments, making it effortless to explore new techniques and incorporate different components into the learning pipeline.
+The unique aspect of this repo lies in its approach to decomposing the components of a neural network. By separating the backbone, head, metric, and loss functions and defining their configuration using a graph structure, users can tailor the architecture to suit their specific needs. This modular approach facilitates the creation and sharing of experiments, making it effortless to explore new techniques and incorporate different components into the learning pipeline.
 
 
 # Installation step :
@@ -55,7 +55,7 @@ Learn2learn module include dataset for fewshot. If you are like me and incouter 
 
 
 For task prediction, a module is responsible for generating the task before feeding the resulting task to the backbone / head. 
-checkout : [rotation](./train_exemple/rotation.py)
+checkout : [manifold-rotations](./train_exemple/manifold-rotations.py)
 
 
 ## Manifold mixup :
@@ -73,18 +73,12 @@ In contrastive approach, sevral views of the data are generated, and the view ar
 
 As it was demonstrated in [EASY](https://arxiv.org/abs/2201.09699), an effective training of the backbone can lead to high quality dataset. Using simple meta-learning algorithm on the dataset composed by the feature of the backbone is often enough for a robust classification.  
 
-Implementing the steps in this repo is actually not straightforward since you need to change the training steps.
+Implementation of this algorithm is made using a l2l meta-dataset & l2l task definition. I did not benchmark this methode against a pytorch implementation like in the original repo. May not be as efficient (may not be as efficient if the dataset fits into the RAM)
 
-Training step : 
-For training : two backward-forward step
-For validation : 
-1. creation of the feature dataset
-2. sampling of few shot task from this feature dataset
-3. apply a few shot module
+A dedicated callback for validation with few shot methode is provided. It create the feature dataset, sample task using l2l framework, and apply a few shot module (a module defined as before). 
 
 
 ## Maybe
 
-- closure for optimizer
-- teacher - student architecture / EMA (should be implemented using a callback)
+- teacher - student architecture / EMA (should be implemented using a callback / separte training module)
 - experiments on augmentation

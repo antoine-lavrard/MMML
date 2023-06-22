@@ -1,7 +1,8 @@
 .vscode/
 conf/
-datasets/
+datasets
 outputs/
+test/
 # folowing auto generated
 # Byte-compiled / optimized / DLL files
 __pycache__/

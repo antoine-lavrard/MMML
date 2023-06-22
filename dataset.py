@@ -64,4 +64,3 @@ class MultiSourceDataset(Dataset):
     def __getitem__(self, index: tuple[int, int]):
         dataset_index, index_data = index
         return (self.list_name[dataset_index], self.datasets[dataset_index][index_data])
-

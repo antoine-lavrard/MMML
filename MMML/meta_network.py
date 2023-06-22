@@ -1,22 +1,56 @@
 from __future__ import annotations  # allow to set return type to Self
 from torch import nn
 from copy import deepcopy
+from inspect import signature
+
+def test_compatibility(sig, inputs_names):
+    remaining_input_names = [name for name in inputs_names]
+    try:    
+        for name, param in sig.parameters.items():
+            if (param.kind == param.POSITIONAL_ONLY) or (param.kind == param.POSITIONAL_OR_KEYWORD):
+                remaining_input_names.pop(0)
+                
+            elif (param.kind == param.VAR_POSITIONAL):
+                #in this case, all the remaining values will be passed to args and kwargs will never be reached
+                return 0
+            elif param.kind == param.KEYWORD_ONLY:
+                current_name = remaining_input_names.pop(0)
+                assert name == current_name
+            elif param.kind == param.VAR_KEYWORD:
+                remaining_input_names.pop(0)
+
+    except IndexError:
+        raise Exception(f"invalid config, got : signature  {sig} and input name {inputs_names}")
 
 
 class ForwardModule(nn.Module):
     def __init__(
         self,
-        split_config : SplitConfigurationBuilder,
+        split_config: SplitConfigurationBuilder,
     ):
         super().__init__()
 
         # input handler is just a callable to unpack the incomming data
         self.ordered_nodes = split_config.get_config()
-        # register the modules for pytorch
-
         
+        # check that the configuration correspond to the given function
+        for node in self.ordered_nodes:
+            node_fn= node["node"]
+            node_inputs = node["input_names"]
+            assert callable(node_fn)
+            try:
+                sig = signature(node_fn)
+                test_compatibility(sig, node_inputs)
+            except ValueError:
+                pass
+
+            
+            
+        # register the modules for pytorch
         self.module = nn.ModuleList(
-            node["node"] for node in self.ordered_nodes if issubclass(type(node["node"]), nn.Module)
+            node["node"]
+            for node in self.ordered_nodes
+            if issubclass(type(node["node"]), nn.Module)
         )
 
         # user can get losses at the end of the epoch
@@ -27,9 +61,9 @@ class ForwardModule(nn.Module):
         # define the tensor that can be freed while calling forward
         pop_keys = []
         for i, node in enumerate(self.ordered_nodes):
-            # avoid error for list_input_names[(i+1):]
             current_input_to_pop = []
             
+            # avoid error for list_input_names[(i+1):]
             if i == number_nodes - 1:
                 pop_keys.append([])
                 continue
@@ -50,7 +84,7 @@ class ForwardModule(nn.Module):
     def forward(self, input):
         # heap : if a object isn't is the stack, it is not pointed by anything and is free to be collected
         # by garbage collection
-        heap = {"input" : input}
+        heap = {"input": input}
         loss = 0
 
         for instanciated_node_cfg, free_variables in zip(
@@ -74,7 +108,7 @@ class ForwardModule(nn.Module):
             elif len(output_names) > 1:
                 assert len(output_names) == len(
                     outputs
-                ), "missmatch between expected number of output and actual number"
+                ), "missmatch between output names : {output_names} and runtime outputs : {ouputs}" 
                 assert not instanciated_node_cfg[
                     "is_loss"
                 ], "only one output expected for loss"
@@ -89,7 +123,7 @@ class ForwardModule(nn.Module):
         # accumulate all losses/ metrics if necessary.
         return loss
 
-    def accumulate_and_get_logs(self, epoch):
+    def accumulate_and_get_logs(self):
         """
         aggregate all metrics and return them, using torchmetrics
         """
@@ -118,7 +152,7 @@ class SplitConfigurationBuilder:
     @classmethod
     def copy_config(cls, split_config: SplitConfigurationBuilder):
         new_instance = cls()
-        new_instance.config = split_config.config# do not copy the data
+        new_instance.config = split_config.config  # do not copy the data
         return new_instance
 
     def _connect(
@@ -127,7 +161,7 @@ class SplitConfigurationBuilder:
         input_names: list[str],
         output_names: list[str],
         is_loss,
-        metric_name = None,
+        metric_name=None,
     ) -> SplitConfigurationBuilder:
         """
         metric name if it is a metric (if it iis not a metric, do not provide). Defaults to None.
@@ -147,10 +181,14 @@ class SplitConfigurationBuilder:
     def connect_node(self, node, input_nams, output_names) -> SplitConfigurationBuilder:
         return self._connect(node, input_nams, output_names, False, None)
 
-    def connect_loss(self, loss, input_names, metric_name = None) -> SplitConfigurationBuilder:
+    def connect_loss(
+        self, loss, input_names, metric_name=None
+    ) -> SplitConfigurationBuilder:
         return self._connect(loss, input_names, [], True, metric_name)
 
-    def connect_metric(self, metric, input_names, metric_name = "_default_name_") -> SplitConfigurationBuilder:
+    def connect_metric(
+        self, metric, input_names, metric_name="_default_name_"
+    ) -> SplitConfigurationBuilder:
         """
         Connect a metric
         If the name is not specified, default to the class name of the metric

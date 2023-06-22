@@ -3,7 +3,12 @@ from torchmetrics import Metric
 from torch import nn
 import inspect
 
+
 class Projection(nn.Module):
+    """
+    Projection : adapts the feature maps from a backbone 
+    in order to be compatible with a classification task
+    """
     def __init__(self, n_features, n_outputs):
         super().__init__()
         self.mean_pool = nn.AdaptiveAvgPool2d(output_size=1)
@@ -15,7 +20,8 @@ class Projection(nn.Module):
         x = self.flatten(x)
         x = self.linear(x)
         return x
-    
+
+
 class WrappedLossFunction(Metric):
     """
     Wrap a loss function to compute a loss into a metric
@@ -50,9 +56,8 @@ class WrapperLossMixup(Metric):
 
     def __init__(self, loss_function) -> None:
         super().__init__()
-        
-        if inspect.isclass(loss_function):
-            assert not any([isinstance(loss_function.__mro__, Metric)]), "WrapperLossMixup take a function"
+        any([parent_cls is Metric for parent_cls in loss_function.__class__.__mro__]), "WrapperLossMixup take a function"
+
         self.loss_function = loss_function
         self.add_state(
             "loss", default=torch.tensor(0, dtype=torch.float32), dist_reduce_fx="sum"

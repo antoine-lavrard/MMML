@@ -27,8 +27,7 @@ class SequentialManifoldMix(nn.Module):
     def __init__(
         self,
         modules: nn.Module,
-        augmentation : str = "random_mixup",
-
+        augmentation: str = "random_mixup",
     ):
         """
         Initialize the module
@@ -45,13 +44,15 @@ class SequentialManifoldMix(nn.Module):
         super().__init__()
         module_list = [module for module in modules]
         self.module_list = nn.ModuleList(module_list)
-        if augmentation == "random_mixup": 
+        if augmentation == "random_mixup":
             self.augmentation = kornia.augmentation.RandomMixUpV2(
                 data_keys=["input", "class"]
             )
         else:
-            raise NotImplementedError(f"methode {augmentation} is not implemented for manifold mixup")
-        
+            raise NotImplementedError(
+                f"methode {augmentation} is not implemented for manifold mixup"
+            )
+
         self.number_layer = len(module_list)
 
     def _forward_train(self, input, target):
