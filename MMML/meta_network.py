@@ -3,15 +3,18 @@ from torch import nn
 from copy import deepcopy
 from inspect import signature
 
+
 def test_compatibility(sig, inputs_names):
     remaining_input_names = [name for name in inputs_names]
-    try:    
+    try:
         for name, param in sig.parameters.items():
-            if (param.kind == param.POSITIONAL_ONLY) or (param.kind == param.POSITIONAL_OR_KEYWORD):
+            if (param.kind == param.POSITIONAL_ONLY) or (
+                param.kind == param.POSITIONAL_OR_KEYWORD
+            ):
                 remaining_input_names.pop(0)
-                
-            elif (param.kind == param.VAR_POSITIONAL):
-                #in this case, all the remaining values will be passed to args and kwargs will never be reached
+
+            elif param.kind == param.VAR_POSITIONAL:
+                # in this case, all the remaining values will be passed to args and kwargs will never be reached
                 return 0
             elif param.kind == param.KEYWORD_ONLY:
                 current_name = remaining_input_names.pop(0)
@@ -20,7 +23,21 @@ def test_compatibility(sig, inputs_names):
                 remaining_input_names.pop(0)
 
     except IndexError:
-        raise Exception(f"invalid config, got : signature  {sig} and input name {inputs_names}")
+        raise Exception(
+            f"invalid config, got : signature  {sig} and input name {inputs_names}"
+        )
+
+
+import torch
+
+
+class LossScaler(nn.Module):
+    def __init__(self, loss, weight):
+        self.loss = loss
+        self.weight = weight
+
+    def forward(self, *args, **kwargs):
+        return self.loss(*args, **kwargs) * self.weight
 
 
 class ForwardModule(nn.Module):
@@ -30,22 +47,25 @@ class ForwardModule(nn.Module):
     ):
         super().__init__()
 
-        # input handler is just a callable to unpack the incomming data
+        # should_reset : set to true when getting a metric, will reset the logs in the next forward call
+        self.should_reset = False
         self.ordered_nodes = split_config.get_config()
-        
+
         # check that the configuration correspond to the given function
         for node in self.ordered_nodes:
-            node_fn= node["node"]
+            node_fn = node["node"]
             node_inputs = node["input_names"]
-            assert callable(node_fn)
+            assert callable(node_fn), f"{node_fn}, {node}"
             try:
                 sig = signature(node_fn)
-                test_compatibility(sig, node_inputs)
             except ValueError:
                 pass
+                # print("signature of :", node_fn, "wasn't verified")
+            else:
+                test_compatibility(sig, node_inputs)
 
-            
-            
+        # TODO : check that the key was in the previous outputs
+
         # register the modules for pytorch
         self.module = nn.ModuleList(
             node["node"]
@@ -54,7 +74,9 @@ class ForwardModule(nn.Module):
         )
 
         # user can get losses at the end of the epoch
-        self.list_metrics = [node for node in self.ordered_nodes if node["metric_name"]]
+        self.list_metrics = [
+            node for node in self.ordered_nodes if node["metric_name"] is not None
+        ]
 
         number_nodes = len(self.ordered_nodes)
         list_input_names = [node["input_names"] for node in self.ordered_nodes]
@@ -62,7 +84,7 @@ class ForwardModule(nn.Module):
         pop_keys = []
         for i, node in enumerate(self.ordered_nodes):
             current_input_to_pop = []
-            
+
             # avoid error for list_input_names[(i+1):]
             if i == number_nodes - 1:
                 pop_keys.append([])
@@ -84,7 +106,11 @@ class ForwardModule(nn.Module):
     def forward(self, input):
         # heap : if a object isn't is the stack, it is not pointed by anything and is free to be collected
         # by garbage collection
-        heap = {"input": input}
+
+        if self.should_reset:
+            self.reset_metrics()
+            self.should_reset = False
+        input = {"input": input}
         loss = 0
 
         for instanciated_node_cfg, free_variables in zip(
@@ -94,7 +120,7 @@ class ForwardModule(nn.Module):
             output_names = instanciated_node_cfg["output_names"]
             node = instanciated_node_cfg["node"]
 
-            current_inputs = [heap[input_name] for input_name in input_names]
+            current_inputs = [input[input_name] for input_name in input_names]
 
             outputs = node(*current_inputs)
 
@@ -103,25 +129,28 @@ class ForwardModule(nn.Module):
 
             if len(output_names) == 1:
                 output_name = output_names[0]
-                heap[output_name] = outputs
+                input[output_name] = outputs
 
             elif len(output_names) > 1:
                 assert len(output_names) == len(
                     outputs
-                ), "missmatch between output names : {output_names} and runtime outputs : {ouputs}" 
+                ), f"missmatch between output names : {output_names} and runtime outputs : {len(outputs)}"
                 assert not instanciated_node_cfg[
                     "is_loss"
                 ], "only one output expected for loss"
-
-                for output_name, output in zip(output_names, outputs):
-                    heap[output_name] = output
+                input.update({key: value for key, value in zip(output_names, outputs)})
 
             for name_to_free in free_variables:
-                heap.pop(name_to_free)  # if keyerror : the pop_keys is not correct
+                input.pop(name_to_free)  # if keyerror : the pop_keys is not correct
 
         # here, if you are not using torch metric, put everything to a logger.
         # accumulate all losses/ metrics if necessary.
         return loss
+
+    def reset_metrics(self):
+        for node_config in self.list_metrics:
+            node = node_config["node"]
+            node.reset()
 
     def accumulate_and_get_logs(self):
         """
@@ -131,7 +160,8 @@ class ForwardModule(nn.Module):
         for node_config in self.list_metrics:
             node = node_config["node"]
             all_metrics[node_config["metric_name"]] = node.compute()
-            node.reset()
+            self.should_reset = True
+
         return all_metrics
 
 
@@ -178,12 +208,16 @@ class SplitConfigurationBuilder:
         )
         return self
 
-    def connect_node(self, node, input_nams, output_names) -> SplitConfigurationBuilder:
-        return self._connect(node, input_nams, output_names, False, None)
+    def connect_node(
+        self, node, input_names, output_names
+    ) -> SplitConfigurationBuilder:
+        return self._connect(node, input_names, output_names, False, None)
 
     def connect_loss(
-        self, loss, input_names, metric_name=None
+        self, loss, input_names, metric_name=None, weight=None
     ) -> SplitConfigurationBuilder:
+        if weight is not None:
+            loss = LossScaler(loss, weight)
         return self._connect(loss, input_names, [], True, metric_name)
 
     def connect_metric(

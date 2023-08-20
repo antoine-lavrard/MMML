@@ -10,6 +10,9 @@ The unique aspect of this repo lies in its approach to decomposing the component
 
 
 requirements :
+kornia
+pillow
+tensorboard
 gdown : (installation of large file from github)
 torchmetric
 Installation of learn2learn :
@@ -71,7 +74,7 @@ In contrastive approach, sevral views of the data are generated, and the view ar
 
 ## Few shot learning.
 
-As it was demonstrated in [EASY](https://arxiv.org/abs/2201.09699), an effective training of the backbone can lead to high quality dataset. Using simple meta-learning algorithm on the dataset composed by the feature of the backbone is often enough for a robust classification.  
+As it was demonstrated in [EASY](https://arxiv.org/abs/2201.09699), an effective training of the backbone can lead to high quality backbone. Using simple meta-learning algorithm on the dataset composed by the feature of the backbone is often enough for a robust classification.  
 
 Implementation of this algorithm is made using a l2l meta-dataset & l2l task definition. I did not benchmark this methode against a pytorch implementation like in the original repo. May not be as efficient (may not be as efficient if the dataset fits into the RAM)
 
@@ -82,3 +85,6 @@ A dedicated callback for validation with few shot methode is provided. It create
 
 - teacher - student architecture / EMA (should be implemented using a callback / separte training module)
 - experiments on augmentation
+
+# issue:
+lambda fn not supported

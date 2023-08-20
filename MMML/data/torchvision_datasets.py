@@ -1,22 +1,35 @@
 """Contains Wrapper for normalized datasets"""
-from torchvision.datasets import CIFAR10, CIFAR100 
+from torchvision.datasets import CIFAR10, CIFAR100
 from torchvision import transforms
 from typing import Optional, Callable
 
-
 DICT_NORMALIZATION = dict(
-    cifar = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(
-            mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261]
-        ),
-    ])
+    cifar=transforms.Normalize(mean=[0.4914, 0.4822, 0.4465], std=[0.247, 0.243, 0.261])
 )
 
 
-def get_normalized_cifar10(root: str, train: bool = True, transform: Optional[Callable] = None, target_transform: Optional[Callable] = None, download: bool = False):
+def get_resulting_transform(transform_pil, transform, normalization):
+    list_transform = []
+
+    if transform_pil is not None:
+        list_transform.append(transform_pil)
+    list_transform.append(transforms.ToTensor())
+    if transform is not None:
+        list_transform.append(transform)
+    list_transform.append(normalization)
+    return transforms.Compose(list_transform)
+
+
+def get_normalized_cifar10(
+    root: str,
+    train: bool = True,
+    transform_pil: Optional[Callable] = None,
+    transform: Optional[Callable] = None,
+    target_transform: Optional[Callable] = None,
+    download: bool = False,
+):
     """Get the following normalized dataset :
-    
+
     `CIFAR10 <https://www.cs.toronto.edu/~kriz/cifar.html>`_ Dataset.
 
     Args:
@@ -33,16 +46,22 @@ def get_normalized_cifar10(root: str, train: bool = True, transform: Optional[Ca
             downloaded again.
 
     """
-    if transform is None:
-        return CIFAR10(root, train, DICT_NORMALIZATION["cifar"], target_transform, download)
-    transform = transforms.Compose(
-        [DICT_NORMALIZATION["cifar"], transform]
+    transform = get_resulting_transform(
+        transform_pil, transform, DICT_NORMALIZATION["cifar"]
     )
     return CIFAR10(root, train, transform, target_transform, download)
 
-def get_normalized_cifar100(root: str, train: bool = True, transform: Optional[Callable] = None, target_transform: Optional[Callable] = None, download: bool = False):
+
+def get_normalized_cifar100(
+    root: str,
+    train: bool = True,
+    pil_transform: Optional[Callable] = None,
+    transform: Optional[Callable] = None,
+    target_transform: Optional[Callable] = None,
+    download: bool = False,
+):
     """Get the following normalized dataset :
-    
+
     `CIFAR100 <https://www.cs.toronto.edu/~kriz/cifar.html>`_ Dataset.
 
     Args:
@@ -59,12 +78,7 @@ def get_normalized_cifar100(root: str, train: bool = True, transform: Optional[C
             downloaded again.
 
     """
-    if transform is None:
-        return CIFAR100(root, train, DICT_NORMALIZATION["cifar"], target_transform, download)
-    transform = transforms.Compose(
-        [DICT_NORMALIZATION["cifar"], transform]
+    transform = get_resulting_transform(
+        pil_transform, transform, DICT_NORMALIZATION["cifar"]
     )
     return CIFAR100(root, train, transform, target_transform, download)
-
-
-

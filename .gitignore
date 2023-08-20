@@ -3,6 +3,8 @@ conf/
 datasets
 outputs/
 test/
+logs/
+profiler_command_line.py
 # folowing auto generated
 # Byte-compiled / optimized / DLL files
 __pycache__/
