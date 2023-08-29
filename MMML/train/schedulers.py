@@ -109,60 +109,6 @@ class SGDR(LRScheduler):
         return lrs
 
 
-# def get_cosinus_restart_with_decay(
-#     optimizer, nu=0.9, number_restart=4, epoch_restart=100, warmup_epochs=None
-# ):
-#     """
-#     Sinusoidal scheduler with warm restart and decaying lr
-#     """
-
-#     if warmup_epochs is not None:
-#         scheduler_warmup = [
-#             lr_scheduler.LinearLR(
-#                 optimizer,
-#                 start_factor=1.0 / (warmup_epochs + 1.0),
-#                 end_factor= 1.0,
-#                 total_iters=warmup_epochs,
-#             )
-#         ]
-#         constant_warmup = [
-#             lr_scheduler.ConstantLR(optimizer, factor=1.0, total_iters=warmup_epochs)
-#         ]
-#         milestones = [warmup_epochs] + [
-#             warmup_epochs + (1 + i) * epoch_restart for i in range(number_restart)
-#         ]
-#     else:
-#         constant_warmup = []
-#         scheduler_warmup = []
-#         milestones = [(1 + i) * epoch_restart for i in range(number_restart)]
-
-#     cosinus_scheduler = lr_scheduler.SequentialLR(
-#         optimizer,
-#         schedulers=scheduler_warmup
-#         + [
-#             lr_scheduler.CosineAnnealingLR(optimizer, T_max=epoch_restart)
-#             for i in range(number_restart + 1)
-#         ],
-#         milestones=milestones,
-#     )
-#     print("milestones :", milestones)
-
-#     discounts = lr_scheduler.SequentialLR(
-#         optimizer,
-#         schedulers=constant_warmup
-#         + [
-#             lr_scheduler.ConstantLR(
-#                 optimizer, factor=nu**i, total_iters=epoch_restart
-#             )
-#             for i in range(number_restart + 1)
-#         ],
-#         milestones=milestones,
-#     )
-
-#     # error when doing Chained_scheduler -> SequentialLr  & when inversing cosinus_scheduler & discouts
-#     scheduler = lr_scheduler.ChainedScheduler([cosinus_scheduler, discounts])
-
-#     return scheduler
 
 
 # def get_polynomial_restart_with_decay(

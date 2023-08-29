@@ -13,8 +13,10 @@ from torch.nn.functional import avg_pool2d
 from dataclasses import dataclass, InitVar, field
 from typing import Union
 from copy import deepcopy
+import learn2learn.data.transforms as l2ltransforms
 
-from MMML.modules.few_shot import get_dataset_to_transform
+
+#from MMML.modules.few_shot import get_dataset_to_transform
 from MMML.train.lookahead import Lookahead
 
 
@@ -54,7 +56,7 @@ class PrepareLookahead(Prepare):
     model: torch.nn.Module
 
     def __post_init__(self):
-        assert type(self.optimizer) is Lookahead, "type of optimizer is not lookahead"
+        assert type(self.optimizer_config.optimizer) is Lookahead, "type of optimizer is not lookahead"
         self.state = "training"
 
     def prepare_training_module(self):
@@ -82,6 +84,10 @@ class DefaultPreparer(Prepare):
 
 
 # MethodeConfig : how the network should be runed
+
+class Config(ABC):
+    def get_evaluation_module(self):
+        raise NotImplementedError()
 
 
 @dataclass
@@ -140,13 +146,12 @@ class SWAMethodeConfig:
 class SharedSWAMethodeConfig:
     module: torch.nn.Module
     swa_model: torch.optim.swa_utils.AveragedModel
-    current_module: int
     DEVICE: str = "cuda:0"
     update_every_n: int = 1
     step_counter: StepCounter = None
 
     def get_evaluation_module(self):
-        return self.swa_model.module[self.current_module]
+        return self.swa_model
     
     def update_swa(self, module):
         self.step_counter.step()
@@ -157,15 +162,21 @@ class SharedSWAMethodeConfig:
 
 
 def get_multi_swa_methode_config(list_module, **kwargs) -> list[SharedSWAMethodeConfig]:
+    # do the deepcopy outside of the AveragedModel in order to share weights
+    new_modules =  deepcopy(torch.nn.ModuleList(list_module))
+    dummy_module = torch.nn.Conv2d(1,1, 1)
+    
+    list_swa_models = [
+        torch.optim.swa_utils.AveragedModel(dummy_module, avg_fn = avg_fn) for i in range(len(list_module))
+    ]
 
-    list_module =  torch.nn.ModuleList(list_module)
-   
-    swa_model = torch.optim.swa_utils.AveragedModel(
-                list_module, avg_fn=avg_fn
-    )
+    for swa_model, module in zip(list_swa_models, new_modules):
+        swa_model.module = module 
+    
+
     shared_step_counter = StepCounter()
     return [
-        SharedSWAMethodeConfig(list_module[i], swa_model, i, step_counter = shared_step_counter, **kwargs) for i in range(len(list_module))
+        SharedSWAMethodeConfig(list_module[i], list_swa_models[i], step_counter = shared_step_counter, **kwargs) for i in range(len(list_module))
     ]
 
 @dataclass
@@ -232,7 +243,6 @@ class UnshuffleDataloaderConfig:
         self.__dict__.update(state)
         self.dataloader = DataLoader(self.dataset, **self.dataloader_kwargs)
 
-
 @dataclass
 class FeatureDatasetConfig:
     n_ways: int
@@ -243,16 +253,49 @@ class FeatureDatasetConfig:
     labels_to_indices: list = field(init=False)
     indices_to_labels: list = field(init=False)
     number_class_novel: int = field(init=False)
+    load_transform: Any = field(init=False)
     num_tasks: int = 10000
 
     def __post_init__(self):
-        meta_dataset = MetaDataset(self.dataset)
-        self.labels_to_indices = meta_dataset.labels_to_indices
-        self.indices_to_labels = meta_dataset.indices_to_labels
-        self.number_class_novel = len(meta_dataset.labels)
-        self.dataset_to_transform = get_dataset_to_transform(
-            self.n_ways, self.n_shots, self.n_queries
+        self.meta_dataset = MetaDataset(self.dataset)
+        self.labels_to_indices = self.meta_dataset.labels_to_indices
+        self.indices_to_labels = self.meta_dataset.indices_to_labels
+        self.number_class_novel = len(self.meta_dataset.labels)
+        
+        # self.dataset_to_transform = get_dataset_to_transform(
+        #     self.n_ways, self.n_shots, self.n_queries
+        # )
+        self.update_unpicklable()
+
+    def update_unpicklable(self):
+        self.load_transform = l2ltransforms.LoadData(self.meta_dataset)
+        transforms = [
+            l2ltransforms.NWays(self.meta_dataset, n=self.n_ways),
+            l2ltransforms.KShots(self.meta_dataset, k=self.n_shots + self.n_queries),
+            self.load_transform,
+            # l2ltransforms.RemapLabels(dataset),
+            # l2ltransforms.ConsecutiveLabels(dataset),
+        ]
+
+        self.taskset = TaskDataset(
+            self.meta_dataset,
+            transforms,
+            num_tasks=self.num_tasks,
         )
+    def update_dataset(self, dataset):
+        self.load_transform.dataset = dataset
+    def __setstate__(self, state):
+        # pickling not tested yet
+        self.__dict__ = state
+        self.meta_dataset = MetaDataset(self.dataset)
+        self.update_unpicklable()
+    def __getstate__(self):
+        to_save = deepcopy(self.__dict__)
+        to_save.pop("meta_dataset")
+        to_save.pop("taskset")
+        to_save.pop("load_transform")
+        return to_save
+
 
 
 @dataclass

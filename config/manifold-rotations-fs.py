@@ -76,7 +76,9 @@ from MMML.train.methodes import (
 )
 
 from MMML.utils import save_summary
+from MMML.train.train import compute_validation_fs, get_writer
 
+from MMML.callbacks import SaveIfImprovement, SaveStateCallback, SaveBackbone
 
 def get_dataloaders(args, input_size):
     transform_pil = None
@@ -344,7 +346,7 @@ def get_optimisation_config(args, parameters, la_steps):
         )
 
     if args.use_lookheahead:
-        optimizer = Lookahead(optimizer, la_steps=la_steps)
+        optimizer = Lookahead(optimizer, la_steps=la_steps, la_alpha= 0.5)
 
     if args.scheduler == "step_lr":
         scheduler = lr_scheduler.MultiStepLR(
@@ -353,7 +355,7 @@ def get_optimisation_config(args, parameters, la_steps):
             gamma=0.1,
         )
     elif args.scheduler == "SGDR":
-        scheduler = SGDR(optimizer, T0=100, cycle_decay=0.9, number_restart=10)
+        scheduler = SGDR(optimizer, T0=100, cycle_decay=args.cycle_decay, number_restart=10)
 
     elif args.scheduler == "quick_eval":
         # original resnet evaluation (without validation split)
@@ -388,6 +390,7 @@ def launch(path_output, list_args: list[str]):
     arg_parser.add_argument("--optimizer", type=str, default="SGD")
     arg_parser.add_argument("--use_swa", action="store_true")
     arg_parser.add_argument("--use_lookheahead", action="store_true")
+    arg_parser.add_argument("--cycle_decay", type=float, default=0.9)
 
     arg_parser.add_argument("--use_rotation_pretext", action="store_true")
     arg_parser.add_argument("--dataset", type=str, default="cifar-fs")
@@ -404,10 +407,10 @@ def launch(path_output, list_args: list[str]):
     DATALOADERFS_KWARGS = dict(
         shuffle=False, batch_size=128, num_workers=5, persistent_workers=True
     )
-    DATALOADERFS_feature_KWARGS = dict(shuffle=False, batch_size=1024, num_workers=5)
-    la_steps = 5
-    save_each_n_epoch=10 # save the whole training state (with optimiser  )
-    evaluation_each_n_epoch = 1
+    DATALOADERFS_feature_KWARGS = dict(shuffle=False, batch_size=1024, num_workers=0)
+    la_steps = 5 # for lookheahead. Number of steps between saves
+    save_each_n_epoch= 5 # save the whole training state (with optimiser  )
+    evaluation_each_n_epoch = 5
 
 
     # ---------- DATAS -----------------
@@ -456,18 +459,21 @@ def launch(path_output, list_args: list[str]):
         methode_config_train = MethodeConfig(train_module)
         if second_train_module is not None:
             methode_config_second_train = MethodeConfig(second_train_module)
-
+        backbone_config = MethodeConfig(backbone)
+    # ------------ TRAINING DEFINITION -----------
+    optimizer_config = get_optimisation_config(args, train_parameters, la_steps)
+    
     if args.use_swa:
-        # for swa : prepare bn of the backbone ()
+        # for swa : prepare bn of the backbone 
+        # if swa is also activated, weight will be averaged on the 
+        # slow weights and evaluation module = averaged module (= don't need to prepare lookahead)
         preparer = PrepareSWA(train_dataloader_config, methode_config_train)
-    elif args.use_lookahead:
-        # lookahead : replace module weights (fast weights) with slow ones
-        preparer = PrepareLookahead(optimizer_config)
+    elif args.use_lookheahead:
+        # if only lookahead : replace module weights (fast weights) with slow ones
+        preparer = PrepareLookahead(optimizer_config, methode_config_train)
         
     else:
         preparer = DefaultPreparer()
-    # ------------ TRAINING DEFINITION -----------
-    optimizer_config = get_optimisation_config(args, train_parameters, la_steps)
     
 
     # --------- Validation Definition -------------------
@@ -522,11 +528,11 @@ def launch(path_output, list_args: list[str]):
     
     callbacks = [save_log_callback]
     if path_output is not None:
-        from MMML.callbacks import SaveIfImprovement, SaveStateCallback
         
         callbacks.append(
             SaveIfImprovement(path_output, backbone_config, "fs-accuracy", "best_backbone.pt")
         )
+        
 
 
     kwargs_training = dict(
@@ -561,30 +567,53 @@ def launch(path_output, list_args: list[str]):
             )
         )
 
+        
+
     launch_training(
         [training_config],
         path_output
     )
 
     # ---------- TEST ----------
-    if path_output is not None:
-        with open(path_output +  "/" + "best_backbone.pt", "rb") as f:
-            best_backbone = torch.load(f)
-    else:
-        warnings.warn("output path not set Computing test loss using the last backbone")
-        best_backbone = backbone_config
+    dataloader_feature_config.num_tasks = 100000
+
+    
     
     test_validation =  FewShotEvaluationConfig(
-        best_backbone,
+        backbone_config,
         fs_module_config,
         dataloader_test_config,
         dataloader_feature_config,
         intermediate_device=intermediate_device
     )
-    from MMML.train.train import compute_validation_fs, get_writer
-
     dict_logs = compute_validation_fs(test_validation)
-    writer = get_writer(path_output, "test")
-    writer.add_hparams(
-        vars(args), dict_logs
-    )
+    if path_output is not None:
+        with open(path_output +  "/" + "best_backbone.pt", "rb") as f:
+            best_backbone = torch.load(f)
+        test_validation2 =  FewShotEvaluationConfig(
+            best_backbone,
+            fs_module_config,
+            dataloader_test_config,
+            dataloader_feature_config,
+            intermediate_device=intermediate_device
+        )
+        dict_logs2 = compute_validation_fs(test_validation2)
+
+        for key, value in dict_logs2.items():
+            dict_logs["best_backbone_"+key] = value
+        w = get_writer(path_output, "test")
+        
+        w.add_hparams(
+            vars(args), dict_logs, run_name = "resume"
+        )
+        w.close() 
+    else:
+        warnings.warn("output path not set Only using the last backbone")
+        
+    
+   
+
+
+    
+
+    

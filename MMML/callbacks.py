@@ -14,7 +14,7 @@ from copy import deepcopy
 import numpy as np
 
 # from MMML.utils.utils import transfer_to, TrainingConfig
-from MMML.modules.few_shot import FeatureDataset, get_dataset_to_transform
+from MMML.modules.few_shot import FeatureDataset#, get_dataset_to_transform
 from MMML.train.configs import ClassicalTraining, MultiStepTraining
 
 class SaveIfImprovement:
@@ -30,7 +30,8 @@ class SaveIfImprovement:
             self.best = np.inf
     def __call__(self, epoch, writer, training_config, dict_evals):
         if writer is None or dict_evals is None:
-            return 0
+            return None
+        
         current_value = dict_evals[self.name_metric]
         is_more = current_value > self.best
         is_better = (is_more and self.goal == "increase") or (not(is_more) and self.goal =="decrease")
@@ -40,6 +41,21 @@ class SaveIfImprovement:
             save_path = os.path.join(self.path_output, self.save_name)
             save(self.to_save, save_path)
 
+
+class SaveBackbone:
+    def __init__(self, path_output, to_save, save_name:str):
+        self.path_output = path_output
+        self.to_save= to_save
+
+        self.save_name = save_name
+
+    def __call__(self, epoch, writer, training_config, dict_evals):
+        if writer is None or dict_evals is None:
+            return None
+        save_path = os.path.join(self.path_output, self.save_name)
+        save(self.to_save, save_path)
+
+
 class SaveStateCallback:
     def __init__(self, path_output, state, each_n_epoch):
         self.path_output = path_output
@@ -48,8 +64,8 @@ class SaveStateCallback:
 
     def __call__(self, epoch, writer, training_config, dict_evals):
         if writer is None:
-            return 0
-        if epoch % self.each_n_epoch == 0:
+            return None
+        if (epoch+1) % self.each_n_epoch == 0:
             save_path = os.path.join(self.path_output, "checkpoint.pt")
             save(self.state, save_path)
 
@@ -62,7 +78,7 @@ class WriteLogsCallback:
         dict_logs = module.accumulate_and_get_logs()
         print(dict_logs)
         if writer is None:
-            return 0
+            return None
 
         write_logs(dict_logs, writer, prefix, epoch)
         scheduler = training_config.optim_config.scheduler
@@ -86,7 +102,7 @@ class WriteLogsMultistepCallback:
             print("step i : ", i)
             print(dict_logs)
             if writer is None:
-                return 0
+                return None
 
             write_logs(dict_logs, writer, f"step-{i}-"+prefix, epoch)
         scheduler = training_config.optim_config.scheduler

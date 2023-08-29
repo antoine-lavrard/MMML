@@ -15,7 +15,7 @@ def test_compatibility(sig, inputs_names):
 
             elif param.kind == param.VAR_POSITIONAL:
                 # in this case, all the remaining values will be passed to args and kwargs will never be reached
-                return 0
+                return None
             elif param.kind == param.KEYWORD_ONLY:
                 current_name = remaining_input_names.pop(0)
                 assert name == current_name

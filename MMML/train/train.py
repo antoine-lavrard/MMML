@@ -33,8 +33,10 @@ def train_one_epoch_classic(
     training_module.train()
     training_module.to(training_config.DEVICE)  # data can be moved by callbacks
 
-    if isinstance(training_config, SWAMethodeConfig):
+    
+    if hasattr(training_config, "swa_model"): 
         training_config.swa_model.to(training_config.DEVICE)
+
     for input_data in tqdm(dataloader):
         optimizer.zero_grad(set_to_none=True)
 
@@ -48,7 +50,9 @@ def train_one_epoch_classic(
 
         scaler.scale(loss).backward()
         scaler.step(optimizer)
-        if isinstance(training_config, SWAMethodeConfig):
+       
+        if hasattr(training_config, "update_swa"):
+            print("updating swa")
             training_config.update_swa(training_module)
         scaler.update()
 
@@ -75,8 +79,10 @@ def train_one_epoch_multistep(
 
         training_module.train()
         training_module.to(training_config.DEVICE)  # data can be moved by callbacks
-        if isinstance(training_config, SWAMethodeConfig):
+        
+        if hasattr(training_config, "swa_model"):
             training_config.swa_model.to(training_config.DEVICE)
+           
     for input_data in tqdm(dataloader):
         for training_config in list_training_config:
             training_module = training_config.module
@@ -91,15 +97,15 @@ def train_one_epoch_multistep(
                 loss = training_module(input_data)
 
             scaler.scale(loss).backward()
-            if isinstance(training_config, SWAMethodeConfig):
-                training_config.update_swa(training_module)
+            if hasattr(training_config, "update_swa"):
+               training_config.update_swa(training_module)
             scaler.step(optimizer)
             scaler.update()
 
     if scheduler is not None:
         scheduler.step()
 
-
+# TODO : use polymorphism ?
 def train_one_epoch(training_config):
     if type(training_config) is ClassicalTraining:
         train_one_epoch_classic(
@@ -139,7 +145,6 @@ def compute_validation_fs(fs_config: FewShotEvaluationConfig):
     feature_dataset = FeatureDataset(
         fs_config.dataloader_feature_config.number_class_novel
     )
-
     backbone = fs_config.backbone_methode_config.get_evaluation_module()
     device_backbone = fs_config.backbone_methode_config.DEVICE
     fs_module = fs_config.fs_module.module
@@ -148,6 +153,8 @@ def compute_validation_fs(fs_config: FewShotEvaluationConfig):
     intermediate_device = fs_config.intermediate_device
     backbone.eval()
     backbone.to(device_backbone)
+
+    fs_module.to(device_fs)
     with torch.no_grad():
         for batch in tqdm(dataloader, desc="few-shot"):
             batch_image, targets = batch
@@ -161,24 +168,25 @@ def compute_validation_fs(fs_config: FewShotEvaluationConfig):
                 features.to(intermediate_device), targets.to(intermediate_device)
             )
 
+        # modify the element of the dataset without modifying index
         meta_dataset = MetaDataset(
             feature_dataset,
             labels_to_indices=fs_config.dataloader_feature_config.labels_to_indices,
             indices_to_labels=fs_config.dataloader_feature_config.indices_to_labels,
         )
-
-        taskset = TaskDataset(
-            meta_dataset,
-            fs_config.dataloader_feature_config.dataset_to_transform(meta_dataset),
-            num_tasks=fs_config.dataloader_feature_config.num_tasks,
-        )
-
-        transfer_to(fs_module, device_fs)
-
+        fs_config.dataloader_feature_config.update_dataset(meta_dataset)
+        taskset = fs_config.dataloader_feature_config.taskset
+        # only need to update the LoadData dataset 
+        # taskset = TaskDataset(
+        #     meta_dataset,
+        #     fs_config.dataloader_feature_config.dataset_to_transform(meta_dataset),
+        #     num_tasks=fs_config.dataloader_feature_config.num_tasks,
+        # )
+        
         dataloader = DataLoader(
             taskset, **fs_config.dataloader_feature_config.dataloader_kwargs
         )
-
+        
         for few_shot_tasks in tqdm(dataloader, desc="few-shot-classification"):
             transfer_to(few_shot_tasks, device_fs)
             fs_module(few_shot_tasks)
@@ -194,9 +202,9 @@ def launch_evaluation(
     preparer: Prepare,
     validation_config: Union[EvaluationConfig, FewShotEvaluationConfig],
 ):
-    if epoch % validation_config.evaluation_each_n_epoch != 0:
-        return 0
-
+    if (epoch+1) % validation_config.evaluation_each_n_epoch != 0:
+        return None
+    # TODO : move the preparer to the validation config and use polymorphism 
     preparer.prepare_model()
     if type(validation_config) is EvaluationConfig:
         dict_loss = compute_validation_classic(validation_config)
@@ -205,7 +213,7 @@ def launch_evaluation(
     else:
         raise NotImplementedError(f"non valid type : {validation_config}")
     preparer.prepare_training_module()
-    print(dict_loss)
+    
     write_logs(dict_loss, writer, validation_config.dataloader_config.name_split, epoch)
     return dict_loss
 

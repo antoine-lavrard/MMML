@@ -42,7 +42,9 @@ class Lookahead(Optimizer):
                 if self.pullback_momentum == "pullback":
                     param_state["cached_mom"] = torch.zeros_like(p.data)
         self.current_device = p.data.device
-
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        self.state, self.optimizer, self.la_alpha, self._la_step, self._total_la_steps, self.pullback_momentum = state["state"], state["optimizer"], state["la_alpha"], state["_la_step"], state["_total_la_steps"], state["pullback_momentum"]
+        
     def __getstate__(self):
         return {
             "state": self.state,

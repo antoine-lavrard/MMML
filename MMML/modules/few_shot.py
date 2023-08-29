@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import Dataset
-import learn2learn.data.transforms as l2ltransforms
+#import learn2learn.data.transforms as l2ltransforms
 from learn2learn.data import MetaDataset
 from torch import nn
 
@@ -90,20 +90,21 @@ class FeatureDataset(Dataset):
         return len(self.images)
 
 
-def get_dataset_to_transform(n_ways, n_shots, n_queries):
-    global get_task_transform
+# def get_dataset_to_transform(n_ways, n_shots, n_queries):
+#     global get_task_transform
 
-    # global needed for pickling
-    def get_task_transform(dataset):
-        return [
-            l2ltransforms.NWays(dataset, n=n_ways),
-            l2ltransforms.KShots(dataset, k=n_shots + n_queries),
-            l2ltransforms.LoadData(dataset),
-            # l2ltransforms.RemapLabels(dataset),
-            # l2ltransforms.ConsecutiveLabels(dataset),
-        ]
+#     # global needed for pickling
+#     # TODO : can't pickle
+#     def get_task_transform(dataset):
+#         return [
+#             l2ltransforms.NWays(dataset, n=n_ways),
+#             l2ltransforms.KShots(dataset, k=n_shots + n_queries),
+#             l2ltransforms.LoadData(dataset),
+#             # l2ltransforms.RemapLabels(dataset),
+#             # l2ltransforms.ConsecutiveLabels(dataset),
+#         ]
 
-    return get_task_transform
+#     return get_task_transform
 
 
 def get_number_class_few_shot_dataset(dataset):
@@ -124,6 +125,7 @@ class Transforml2lTask:
 
     def __call__(self, few_shot_tasks):
         features, labels = few_shot_tasks
+
         bs, n_exemples, dim = features.shape
         assert n_exemples == (self.n_shots + self.n_queries) * self.n_ways
 
